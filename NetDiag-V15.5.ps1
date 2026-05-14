@@ -1,4 +1,4 @@
-cls
+﻿cls
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -107,8 +107,8 @@ $IPConfig.Add_Click({
     Get-IPConfig
 })
 
-$advancedMenu.DropDownItems.Add($flushDnsItem)
-$advancedMenu.DropDownItems.Add($IPConfig)
+$advancedMenu.DropDownItems.Add($flushDnsItem) | Out-Null
+$advancedMenu.DropDownItems.Add($IPConfig) | Out-Null
 
 # 2. Credits Menu
 $creditsMenu = New-Object System.Windows.Forms.ToolStripMenuItem
@@ -570,15 +570,14 @@ return $success
         Level = 1,2
         StartTime = (Get-Date).AddDays(-3)
     } -ErrorAction SilentlyContinue
-      Update-Progress 20 "Checking Event Logs for DHCP Errors..."
-    write-host '<-Start Result->' 
-    $events | Select-Object -First 1 | fl TimeCreated, message | Out-String
-    write-host '<-End Result->' 
+      Update-Progress 20 "Checking Event Logs for DHCP Errors..." 
+    
+
 
     if ($events.Count -gt 0){
         #return Error Status
         Write-OutputBox "----  DHCP Errors were found in local log  ----" Red
-        Write-OutputBox $events Black
+        Write-OutputBox ($events | Select-Object -First 1 | fl TimeCreated, message | Out-String) Black
         }
     else{#return Good Status
         Write-OutputBox "No DHCP Errors Found" Green
@@ -588,16 +587,16 @@ return $success
 
 function Check-StaticIPs {
     #check if there is a static Reserved IP
-    Update-status (Get-Random -Minimum 10 -Maximum 40) "Checking for local Static IP's"
+    Update-progress (Get-Random -Minimum 10 -Maximum 40) "Checking for local Static IP's"
     $ManualIPs = (Get-NetIPAddress | where SuffixOrigin -EQ Manual | ft ipaddress -HideTableHeaders | Out-String -Width 250).Trim()
     if ($ManualIPs.Length -eq 0) {
         Write-OutputBox -Color "Green" -Text "No Static IP"}
-        else{ Write-OutputBox -Color "red" -Text "Static IP"}
+        else{ Write-OutputBox -Color "red" -Text "Primary Interface is a Static IP"}
 
-      Update-status (Get-Random -Minimum 10 -Maximum 40) "Checking for static local DNS...)"
+      Update-progress (Get-Random -Minimum 10 -Maximum 40) "Checking for static local DNS...)"
 
     #check if the DNS Is set static Seperate of DHCP
-    Update-status (Get-Random -Minimum 30 -Maximum 60) "Checking for local Static DNS: $($ManualIPs)"
+    Update-progress (Get-Random -Minimum 30 -Maximum 60) "Checking for local Static DNS..."
     function Check-StaticDNS {
         $StaticDNSSearch = (netsh int ip show dnsservers) | Select-String "Statically" | Where-Object { $_.Line -notlike "*None*" }
         if ($StaticDNSSearch -ne $null){
@@ -608,8 +607,11 @@ function Check-StaticIPs {
     $StaticDNS = Check-StaticDNS
     $StaticDNS
     if (($StaticDNS).Length -ne 0) {
-    Write-OutputBox -Color "Orange" -Text "There is Static DNS set."
+    Write-OutputBox -Color "Red" -Text "There for Static DNS settings."
+    Write-OutputBox -Color "Black" -Text "There are special cases where DNS may be set manually but if done on portable devices this may break internet connectivity when moving networks."
+    Write-OutputBox -Color "Black" -Text "Check with your Network administrators if a DHCP Reservation could be used instead of a local static."
         }
+Update-progress 100 "Done Checking for local Static settings."
 }
 
 # Function to open the categorized Individual Tests menu
@@ -676,7 +678,8 @@ function Show-IndividualTestsMenu {
     )
 
     $SpecialCase = &$CreateGroup "Special Cases" @(
-    @{ Name = "Check Event Log for DHCP Errors"; Action = { Check-DHCPErrors} }
+    @{ Name = "Check Event Log for DHCP Errors"; Action = { Check-DHCPErrors} },
+     @{ Name = "Check for Static IP Settings"; Action = { Check-StaticIPs} }
     )
 
 
