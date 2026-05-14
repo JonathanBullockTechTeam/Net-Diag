@@ -240,8 +240,9 @@ function Test-ISPGatewayPing {
     return $result.Contains("PASSED")
 }
 
+
 function Test-LocalDNS {
-    Update-Progress 70 "Testing Local DNS Resolution..."
+    Update-Progress 20 "Testing Local DNS Resolution..."
     $result = "Local DNS Resolution Test:`r`n"
     $success = $false
     $color = "Red"
@@ -316,8 +317,8 @@ function Test-LocalDNS {
     return $success
 }
 function Test-SystemDNS {
-    Update-Progress 85 "Testing Public DNS Resolution..."
-    $result = "Public DNS Resolution Test:`r`n"
+    Update-Progress 30 "Testing Local DNS Resolution..."
+    $result = "Local DNS Resolution Test:`r`n"
     $success = $false
     $color = "Red"
     $testDomains = @("google.com", "cloudflare.com")
@@ -338,35 +339,18 @@ function Test-SystemDNS {
         }
     }
     Write-OutputBox $result $color
-    Update-Progress 100 "Public DNS Test Complete"
+    Update-Progress 100 "Local DNS Test Complete"
     return $success
 }
-
 function Test-PublicDNS {
-    Update-Progress 85 "Testing Public DNS Resolution..."
+    Update-Progress 30 "Testing Public DNS Server Resolution..."
     $result = "Public DNS Resolution Test:`r`n"
     $success = $false
     $color = "Red"
     $testDomains = @("google.com", "cloudflare.com")
     
-    # Test with default system DNS
-    foreach ($domain in $testDomains) {
-        try {
-            $dnsResult = [System.Net.Dns]::GetHostAddresses($domain)
-            if ($dnsResult) {
-                $result += " - ${domain} resolution (System DNS): PASSED`r`n"
-                $success = $true
-                $color = "Green"
-            } else {
-                $result += " - ${domain} resolution (System DNS): FAILED`r`n"
-            }
-        } catch {
-            $result += " - ${domain} resolution (System DNS): FAILED`r`nError: $_`r`n"
-        }
-    }
-    
     # Test with Google and Cloudflare DNS servers
-    $publicDnsServers = @("8.8.8.8", "1.1.1.1")
+    $publicDnsServers = @("8.8.8.8", "1.1.1.1","208.67.222.222")
     foreach ($server in $publicDnsServers) {
         foreach ($domain in $testDomains) {
             try {
@@ -383,9 +367,17 @@ function Test-PublicDNS {
             }
         }
     }
+    Write-OutputBox $result $color
+    Update-Progress 100 "Public DNS Resolution Test Complete"
+    return $success
+}
+function Test-DSNHijacking {
+    Update-Progress 35 "Testing Public DNS HiJacking..."
+    $success = $false
+    $color = "Red"    
     
     # Test for DNS hijacking with fake DNS server
-    $fakeServer = "5.5.5.5"
+    $fakeServer = "10.0.0.0"
     $validHost = "google.com"
     $result += " - DNS Hijacking Test (Fake Server ${fakeServer}):`r`n"
     try {
@@ -405,10 +397,9 @@ function Test-PublicDNS {
     }
     
     Write-OutputBox $result $color
-    Update-Progress 100 "Public DNS Test Complete"
+    Update-Progress 100 "DNS HiJacking Test Complete."
     return $success
 }
-
 
 function Test-ExternalPing {
     Update-Progress 95 "Testing External Ping..."
@@ -568,6 +559,33 @@ $success = $true}
 return $success
 }
 
+
+ function Check-DHCPErrors{
+    Write-OutputBox "Scanning Event Logs for DHCP Error IDs: 1000,1001,1002,1003" Black
+    Update-Progress 10 "Checking Event Logs for DHCP Errors..."
+
+    $events = Get-WinEvent -FilterHashtable @{
+        ProviderName = 'Microsoft-Windows-Dhcp-Client'
+        #ID = 1000,1001,1002,1003
+        Level = 1,2
+        StartTime = (Get-Date).AddDays(-3)
+    } -ErrorAction SilentlyContinue
+      Update-Progress 20 "Checking Event Logs for DHCP Errors..."
+    write-host '<-Start Result->' 
+    $events | Select-Object -First 1 | fl TimeCreated, message | Out-String
+    write-host '<-End Result->' 
+
+    if ($events.Count -gt 0){
+        #return Error Status
+        Write-OutputBox "----  DHCP Errors were found in local log  ----" Red
+        Write-OutputBox $events Black
+        }
+    else{#return Good Status
+        Write-OutputBox "No DHCP Errors Found" Green
+        }
+    Update-Progress 100 "Done Scanning for DHCP Errors."
+}
+
 # Function to open the categorized Individual Tests menu
 function Show-IndividualTestsMenu {
     $indForm = New-Object System.Windows.Forms.Form
@@ -619,7 +637,9 @@ function Show-IndividualTestsMenu {
 
     $dnsGroup = &$CreateGroup "DNS Tests" @(
         @{ Name = "Test Local DNS"; Action = { Test-LocalDNS } },
+        @{ Name = "Test System DNS"; Action = { Test-SystemDNS } },
         @{ Name = "Test Public DNS"; Action = { Test-PublicDNS } },
+        @{ Name = "Test DNS Hijacking"; Action = { Test-DSNHijacking } },
         @{ Name = "Test DNS Per Interface"; Action = { Test-DNSServersPerInterface } }
     )
 
@@ -629,12 +649,17 @@ function Show-IndividualTestsMenu {
         @{ Name = "Test Cloud Services"; Action = { Test-CloudServices } }
     )
 
+    $SpecialCase = &$CreateGroup "Special Cases" @(
+    @{ Name = "Check Event Log for DHCP Errors"; Action = { Check-DHCPErrors} }
+    )
+
+
     # Add the generated groups to the layout panel
     $flowLayout.Controls.Add($physicalGroup)
     $flowLayout.Controls.Add($dnsGroup)
     $flowLayout.Controls.Add($externalGroup)
 
-   <# Clear Output Button
+   # Clear Output Button
     $menuClearButton = New-Object System.Windows.Forms.Button
     $menuClearButton.Text = "Clear Output"
     $menuClearButton.Size = New-Object System.Drawing.Size(300, 35)
@@ -645,7 +670,7 @@ function Show-IndividualTestsMenu {
         Update-Progress 0 "Idle"
         $statusLabel.Text = "Status: Idle"
     })
-    $flowLayout.Controls.Add($menuClearButton)#>
+    $flowLayout.Controls.Add($menuClearButton)
     # --------------------------------
 
     $indForm.Controls.Add($flowLayout)
@@ -655,10 +680,11 @@ function Show-IndividualTestsMenu {
 }
 <#-----------------------------------------Grouped Function Tests----------------------------------------#>
 function Test-DNS {
-Test-DNSServersPerInterface 
 Test-LocalDNS
-Test-DNSServersPerInterface}
-
+Test-SystemDNS
+Test-PublicDNS
+Test-DSNHijacking
+}
 function Test-GateWay {
 Test-LocalGatewayPing
 Test-ISPGatewayPing
