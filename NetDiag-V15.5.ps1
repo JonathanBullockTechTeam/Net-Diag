@@ -1,4 +1,6 @@
 ﻿cls
+#Log file loctaion
+$LogFile = ".\NetDiag $(get-date -Format yyyy-MM-dd_hh-mm).log"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -74,6 +76,8 @@ function Write-OutputBox {
     $outputBox.AppendText("$Text`r`n")
     $outputBox.SelectionColor = "Black"
     $outputBox.ScrollToCaret()
+    #write $text to logfile
+    Out-File -Append -FilePath $LogFile -InputObject "-----------------$(get-date -Format g)----------------- `n$Text"
 }
 
 # Function to update progress bar and status
